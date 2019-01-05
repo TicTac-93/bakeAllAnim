@@ -22,18 +22,14 @@ import MaxPlus
 import sys
 import os
 
-# PyMXS variable setup
-_rt = pymxs.runtime
-_at = pymxs.attime
-_animate = pymxs.animate
-
 # --------------------
 #      UI Class
 # --------------------
 
-class bakeAnimUI(QtW.QDialog):
 
-    def __init__(self, ui_file, runtime, parent=MaxPlus.GetQMaxMainWindow()):
+class BakeAnimUI(QtW.QDialog):
+
+    def __init__(self, ui_file, pymxs, parent=MaxPlus.GetQMaxMainWindow()):
         """
         The Initialization of the main UI class
         :param ui_file: The path to the .UI file from QDesigner
@@ -41,14 +37,14 @@ class bakeAnimUI(QtW.QDialog):
         :param parent: The main Max Window
         """
         # Init QtW.QDialog
-        super(bakeAnimUI, self).__init__(parent)
+        super(BakeAnimUI, self).__init__(parent)
 
         # ---------------------------------------------------
         #                    Variables
         # ---------------------------------------------------
 
         self._ui_file_string = ui_file
-        self._rt = runtime
+        self._pymxs = pymxs
         self._parent = parent
 
         # ---------------------------------------------------
@@ -81,32 +77,114 @@ class bakeAnimUI(QtW.QDialog):
         #                   Widget Setup
         # ---------------------------------------------------
 
+        # Frame Range
+        self._spn_start = self.findChild(QtW.QSpinBox, 'spn_start')
+        self._spn_end = self.findChild(QtW.QSpinBox, 'spn_end')
+        self._spn_nth = self.findChild(QtW.QSpinBox, 'spn_nth')
+        self._btn_range = self.findChild(QtW.QPushButton, 'btn_updateRange')
+        self._chk_pad = self.findChild(QtW.QCheckBox, 'chk_pad')
+
+        # Track Selection
+        self._box_tracks = self.findChild(QtW.QWidget, 'box_tracks')
+        self._btn_tracks = self.findChild(QtW.QPushButton, 'btn_updateTracks')
+
+        # Bake
+        self._btn_bake = self.findChild(QtW.QPushButton, 'btn_getBaked')
+        self._bar_progress = self.findChild(QtW.QProgressBar, 'bar_progress')
+        self._lbl_status = self.findChild(QtW.QLabel, 'lbl_status')
+
+        # ---------------------------------------------------
+        #                Function Connections
+        # ---------------------------------------------------
+        # This section is sparse because we don't worry about fetching and validating other settings until we bake.
+
+        # Frame Range
+        self._btn_range.pressed.connect(self._update_range)
+
+        # Track Selection
+        self._btn_tracks.pressed.connect(self._update_tracks)
+
+        # Bake
+        self._btn_bake.pressed.connect(self._bake)
+
+        # ---------------------------------------------------
+        #                  Parameter Setup
+        # ---------------------------------------------------
+
+        self._options = {'start': 0,
+                         'end': 100,
+                         'nth': 1,
+                         'pad': False}
+
         # ---------------------------------------------------
         #                   End of Init
 
+    # ---------------------------------------------------
+    #                  Private Methods
+    # ---------------------------------------------------
 
-# ===========================
-#           Logic
-# ===========================
+    def _update_range(self):
+        _rt = self._pymxs.runtime
+        self._spn_start.setValue(_rt.animationRange.start)
+        self._spn_end.setValue(_rt.animationRange.end)
 
-def get_keyed_subtracks(track, list=[]):
-    """
-    Crawl through track heirarchy, building a list of animated tracks.
-    :param track: The track to start crawling from - also used when called recursively
-    :param list: The list of animated tracks, should start blank.
-    :return: A list of all animated track objects below the initial track.
-    """
-    # Only add this track to the list if it's a SubAnim, has a controller, and has been animated
-    if _rt.iskindof(track, _rt.SubAnim) and _rt.iscontroller(track.controller) and track.isanimated:
-        if track not in list:
-            list.append(track)
 
-    # Always call self recursively on all children of this track
-    # Note: SubAnim list is 1-indexed.  Thanks, Autodesk.
-    for i in range(1, track.numsubs + 1):
-        list = get_keyed_subtracks(_rt.getSubAnim(track, i), list)
+    def _update_tracks(self):
+        """
+        Updates the Track Selection box with a list of unique track names
+        """
+        _rt = self._pymxs.runtime
+        tracks = []
+        layout = self._box_tracks.layout()
 
-    return list
+        # Get track list from current selection
+        for obj in _rt.getCurrentSelection():
+            tracks = self._get_keyed_subtracks(obj, tracks)
+
+        # Clear the UI track list, repopulate with tracks we found
+        for i in range(layout.count()):
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        index = 0
+        for track in tracks:
+            layout.addWidget(QtW.QCheckBox(track.name))
+            widget = layout.itemAt(index).widget()
+            widget.setChecked(True)
+            index += 1
+
+        layout.addStretch()
+
+
+    def _bake(self):
+        print "Bake"
+
+
+    def _get_keyed_subtracks(self, track, list=[]):
+        """
+        Crawl through track heirarchy, building a list of animated tracks.  Exclude Position and Rotation parent tracks.
+        :param track: The track to start crawling from - also used when called recursively
+        :param list: The list of animated tracks, should start blank.
+        :return: A list of all (unique) animated track objects below the initial track.
+        """
+        _rt = self._pymxs.runtime
+
+        ignore = ['Transform', 'Position', 'Rotation']
+
+        # Only add this track to the list if it's a SubAnim, has a controller, and has been animated
+        if _rt.iskindof(track, _rt.SubAnim) and _rt.iscontroller(track.controller) and track.isanimated:
+            if track not in list and track.name not in ignore:
+                list.append(track)
+
+        # Always call self recursively on all children of this track
+        # Note: SubAnim list is 1-indexed.  Thanks, Autodesk.
+        for i in range(1, track.numsubs + 1):
+            list = self._get_keyed_subtracks(_rt.getSubAnim(track, i), list)
+
+        return list
+
 
 def bake_anim(obj, start, end, n):
     tracks = get_keyed_subtracks(obj)
@@ -136,17 +214,6 @@ def bake_anim(obj, start, end, n):
         print "Baked %s" % track.name
 
 
-# start = _rt.animationRange.start
-# end = _rt.animationRange.end
-# n = 3
-#
-# print "Start: %d\rEnd: %d\rN: %d" % (start, end, n)
-#
-# for obj in _rt.getCurrentSelection():
-#     print "-------------------\rChecking %s..." % obj.name
-#     bake_anim(obj, start, end, n)
-
-
 # --------------------
 #    Dialog Setup
 # --------------------
@@ -154,7 +221,7 @@ def bake_anim(obj, start, end, n):
 # Path to UI file
 _uif = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) + "\\bakeAllAnim_v01.ui"
 _app = MaxPlus.GetQMaxMainWindow()
-ui = bakeAnimUI(_uif, _rt, _app)
+ui = BakeAnimUI(_uif, pymxs, _app)
 
 # Punch it
 ui.show()

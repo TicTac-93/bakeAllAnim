@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>227</width>
-    <height>381</height>
+    <height>409</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -24,7 +24,7 @@
     <number>10</number>
    </property>
    <item>
-    <widget class="QGroupBox" name="horizontalGroupBox">
+    <widget class="QGroupBox" name="grp_frameRange">
      <property name="title">
       <string>Frame Range</string>
      </property>
@@ -45,7 +45,7 @@
        <number>6</number>
       </property>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_6">
+       <layout class="QHBoxLayout" name="grp_frameOptions">
         <item>
          <widget class="QLabel" name="label_4">
           <property name="text">
@@ -54,12 +54,15 @@
          </widget>
         </item>
         <item>
-         <widget class="QSpinBox" name="spinBox_4">
+         <widget class="QSpinBox" name="spn_nth">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
+          </property>
+          <property name="toolTip">
+           <string>Set higher than 1 to only bake every nth frame.  eg, 1, 3, 5, 7... or 1, 5, 10, 15...</string>
           </property>
           <property name="maximum">
            <number>999</number>
@@ -83,7 +86,10 @@
          </spacer>
         </item>
         <item>
-         <widget class="QCheckBox" name="checkBox">
+         <widget class="QCheckBox" name="chk_pad">
+          <property name="toolTip">
+           <string>If checked, and Nth Frame is set, we'll make sure to put a key on the End frame</string>
+          </property>
           <property name="text">
            <string>Pad Range?</string>
           </property>
@@ -92,7 +98,7 @@
        </layout>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_4">
+       <layout class="QHBoxLayout" name="grp_frameRange_2">
         <property name="topMargin">
          <number>0</number>
         </property>
@@ -104,7 +110,10 @@
          </widget>
         </item>
         <item>
-         <widget class="QSpinBox" name="spinBox">
+         <widget class="QSpinBox" name="spn_start">
+          <property name="toolTip">
+           <string>The frame to start baking from.  Note that &lt;b&gt;all animation&lt;/b&gt; on the selected tracks will be cleared, not just in this range.</string>
+          </property>
           <property name="maximum">
            <number>9999</number>
           </property>
@@ -131,12 +140,15 @@
          </widget>
         </item>
         <item>
-         <widget class="QSpinBox" name="spinBox_2">
+         <widget class="QSpinBox" name="spn_end">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
+          </property>
+          <property name="toolTip">
+           <string>The frame to bake to.  Note that &lt;b&gt;all animation&lt;/b&gt; on the selected tracks will be cleared, not just in this range.</string>
           </property>
           <property name="frame">
            <bool>false</bool>
@@ -155,7 +167,10 @@
        </layout>
       </item>
       <item>
-       <widget class="QPushButton" name="pushButton">
+       <widget class="QPushButton" name="btn_updateRange">
+        <property name="toolTip">
+         <string>Matches the animation range to the 3ds Max time slider.</string>
+        </property>
         <property name="text">
          <string>Get Range from Scene</string>
         </property>
@@ -165,7 +180,7 @@
     </widget>
    </item>
    <item>
-    <widget class="QGroupBox" name="groupBox">
+    <widget class="QGroupBox" name="grp_trackSel">
      <property name="title">
       <string>Track Selection</string>
      </property>
@@ -189,7 +204,7 @@
        <number>0</number>
       </property>
       <item>
-       <widget class="QScrollArea" name="scrollArea">
+       <widget class="QScrollArea" name="box_trackScroll">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
           <horstretch>0</horstretch>
@@ -199,8 +214,11 @@
         <property name="minimumSize">
          <size>
           <width>0</width>
-          <height>100</height>
+          <height>150</height>
          </size>
+        </property>
+        <property name="toolTip">
+         <string>Tracks selected here will be baked.</string>
         </property>
         <property name="frameShape">
          <enum>QFrame::Box</enum>
@@ -211,21 +229,40 @@
         <property name="widgetResizable">
          <bool>true</bool>
         </property>
-        <widget class="QWidget" name="scrollAreaWidgetContents">
+        <widget class="QWidget" name="box_tracks">
          <property name="geometry">
           <rect>
            <x>0</x>
            <y>0</y>
            <width>203</width>
-           <height>158</height>
+           <height>146</height>
           </rect>
          </property>
-         <layout class="QVBoxLayout" name="verticalLayout_3"/>
+         <layout class="QVBoxLayout" name="verticalLayout_3">
+          <property name="spacing">
+           <number>0</number>
+          </property>
+          <property name="leftMargin">
+           <number>5</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>5</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+         </layout>
         </widget>
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="pushButton_3">
+       <widget class="QPushButton" name="btn_updateTracks">
+        <property name="toolTip">
+         <string>Update the Track Selection list with all animated tracks in the current selection.</string>
+        </property>
         <property name="text">
          <string>Get Tracks from Selection</string>
         </property>
@@ -235,9 +272,73 @@
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="pushButton_2">
+    <widget class="QPushButton" name="btn_getBaked">
+     <property name="toolTip">
+      <string>Bake selected tracks.</string>
+     </property>
      <property name="text">
       <string>Get Baked</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QProgressBar" name="bar_progress">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>5</height>
+      </size>
+     </property>
+     <property name="baseSize">
+      <size>
+       <width>0</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximum">
+      <number>100</number>
+     </property>
+     <property name="value">
+      <number>0</number>
+     </property>
+     <property name="textVisible">
+      <bool>false</bool>
+     </property>
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="invertedAppearance">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="lbl_status">
+     <property name="font">
+      <font>
+       <pointsize>8</pointsize>
+       <weight>75</weight>
+       <bold>true</bold>
+       <kerning>true</kerning>
+      </font>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Plain</enum>
+     </property>
+     <property name="text">
+      <string>Status Update</string>
+     </property>
+     <property name="textFormat">
+      <enum>Qt::AutoText</enum>
      </property>
     </widget>
    </item>
