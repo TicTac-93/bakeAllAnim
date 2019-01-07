@@ -1,3 +1,7 @@
+# --------------------------------
+#   Bake All Anim v1.0.0 Release
+# --------------------------------
+
 # Destroys instances of the dialog before recreating it
 # This has to go first, before modules are reloaded or the ui var is re-declared.
 try:
@@ -289,7 +293,7 @@ class BakeAnimUI(QtW.QDialog):
 # --------------------
 
 # Path to UI file
-_uif = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) + "\\bakeAllAnim_v01.ui"
+_uif = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) + "\\bakeAllAnim.ui"
 _app = MaxPlus.GetQMaxMainWindow()
 ui = BakeAnimUI(_uif, pymxs, _app)
 
