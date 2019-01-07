@@ -114,7 +114,13 @@ class BakeAnimUI(QtW.QDialog):
         self._options = {'start': 0,
                          'end': 100,
                          'nth': 1,
-                         'pad': False}
+                         'pad': False,
+                         'tracks': []}
+
+        # Label color vars
+        self._err = "color=#e82309"
+        self._wrn = "color=#f7bd0e"
+        self._grn = "color=#3cc103"
 
         # ---------------------------------------------------
         #                   End of Init
@@ -124,22 +130,38 @@ class BakeAnimUI(QtW.QDialog):
     # ---------------------------------------------------
 
     def _update_range(self):
+        """
+        Update the frame range spinners with the Max Time Slider range.
+        """
         _rt = self._pymxs.runtime
         self._spn_start.setValue(_rt.animationRange.start)
         self._spn_end.setValue(_rt.animationRange.end)
 
+        # Update status label
+        self._lbl_status.setText("<font %s>Updated:</font> Frame Range" % self._grn)
+
 
     def _update_tracks(self):
         """
-        Updates the Track Selection box with a list of unique track names
+        Updates the Track Selection box with a list of unique track names.
         """
         _rt = self._pymxs.runtime
         tracks = []
         layout = self._box_tracks.layout()
 
+        selection = _rt.getCurrentSelection()
+        self._bar_progress.setMaximum(len(selection))
+        self._lbl_status.setText("Finding animated tracks...")
+
         # Get track list from current selection
-        for obj in _rt.getCurrentSelection():
-            tracks = self._get_keyed_subtracks(obj, tracks)
+        for obj in selection:
+            tracks = self._get_keyed_subtracks(obj, tracks, namesOnly=True)
+            self._bar_progress.setValue(self._bar_progress.value()+1)
+
+        # Update status label and progress bar
+        self._lbl_status.setText("Updating Track Selection list...")
+        self._bar_progress.setValue(0)
+        self._bar_progress.setMaximum(len(tracks))
 
         # Clear the UI track list, repopulate with tracks we found
         for i in range(layout.count()):
@@ -150,68 +172,116 @@ class BakeAnimUI(QtW.QDialog):
 
         index = 0
         for track in tracks:
-            layout.addWidget(QtW.QCheckBox(track.name))
+            layout.addWidget(QtW.QCheckBox(track))
             widget = layout.itemAt(index).widget()
             widget.setChecked(True)
+            self._bar_progress.setValue(self._bar_progress.value()+1)
             index += 1
 
         layout.addStretch()
+        
+        self._lbl_status.setText("<font %s>Found:</font> %d Tracks in %d Objects" % (self._grn,
+                                                                                     len(tracks),
+                                                                                     len(_rt.getCurrentSelection())))
 
 
     def _bake(self):
-        print "Bake"
+        """
+        Update options, validate frame range, and bake selected tracks.
+        """
+        _rt = self._pymxs.runtime
+        _at = self._pymxs.attime
+        _animate = self._pymxs.animate
+
+        # Update options from GUI
+        self._options['start'] = self._spn_start.value()
+        self._options['end'] = self._spn_end.value()
+        self._options['nth'] = self._spn_nth.value()
+        self._options['pad'] = self._chk_pad.isChecked()
+        self._options['tracks'] = []
+        # Get selected tracks
+        layout = self._box_tracks.layout()
+        for i in range(layout.count()):
+            widget = layout.itemAt(i).widget()
+            if widget and widget.isChecked():
+                self._options['tracks'].append(str(widget.text()))
+
+        # Validate options
+        if self._options['start'] >= self._options['end']:
+            self._lbl_status.setText("<font %s>ERROR:</font> Start frame is after End!" % self._err)
+            return
+
+        # Apply padding if needed
+        if self._options['pad'] and ((self._options['end'] - self._options['start']) % self._options['nth']) > 0:
+            self._options['end'] += ((self._options['end'] - self._options['start']) % self._options['nth'])
+
+        # Bake selected objects / tracks
+        with self._pymxs.undo(True, 'Bake Selection'):
+            selection = _rt.getCurrentSelection()
+
+            # Update status label and progress bar
+            self._lbl_status.setText("Baking %d Objects..." % len(selection))
+            self._bar_progress.setValue(0)
+            self._bar_progress.setMaximum(len(selection))
+
+            for obj in selection:
+                tracks = self._get_keyed_subtracks(obj)
+                if len(tracks) == 0:
+                    self._bar_progress.setValue(self._bar_progress.value()+1)
+                    continue
+
+                for track in tracks:
+                    # Skip track if it's not selected
+                    if track.name not in self._options['tracks']:
+                        continue
+
+                    # Cache track values _at each frame, every n'th frame
+                    anim = []
+                    for t in range(self._options['start'], self._options['end']+1, self._options['nth']):
+                        with _at(t):
+                            anim.append(track.value)
+
+                    # Now clear the track and write cached keys
+                    _rt.deleteKeys(track)
+
+                    anim_index = 0
+                    with _animate(True):
+                        for t in range(self._options['start'], self._options['end']+1, self._options['nth']):
+                            with _at(t):
+                                track.controller.value = anim[anim_index]
+                            anim_index += 1
+
+                self._bar_progress.setValue(self._bar_progress.value()+1)
+
+        self._lbl_status.setText("<font %s>Baked:</font> %d tracks on %d objects" % (self._grn,
+                                                                                     len(self._options['tracks']),
+                                                                                     len(selection)))
 
 
-    def _get_keyed_subtracks(self, track, list=[]):
+    def _get_keyed_subtracks(self, track, list=[], namesOnly=False):
         """
         Crawl through track heirarchy, building a list of animated tracks.  Exclude Position and Rotation parent tracks.
         :param track: The track to start crawling from - also used when called recursively
         :param list: The list of animated tracks, should start blank.
+        :param namesOnly: If true, only consider the track names for uniqueness.
         :return: A list of all (unique) animated track objects below the initial track.
         """
         _rt = self._pymxs.runtime
-
         ignore = ['Transform', 'Position', 'Rotation']
 
         # Only add this track to the list if it's a SubAnim, has a controller, and has been animated
         if _rt.iskindof(track, _rt.SubAnim) and _rt.iscontroller(track.controller) and track.isanimated:
-            if track not in list and track.name not in ignore:
+            if not namesOnly and track not in list and track.name not in ignore:
                 list.append(track)
+            elif namesOnly and track.name not in list and track.name not in ignore:
+                list.append(track.name)
 
         # Always call self recursively on all children of this track
         # Note: SubAnim list is 1-indexed.  Thanks, Autodesk.
         for i in range(1, track.numsubs + 1):
-            list = self._get_keyed_subtracks(_rt.getSubAnim(track, i), list)
+            list = self._get_keyed_subtracks(_rt.getSubAnim(track, i), list, namesOnly)
 
         return list
-
-
-def bake_anim(obj, start, end, n):
-    tracks = get_keyed_subtracks(obj)
-    print "%s has %d keyed tracks" % (obj.name, len(tracks))
-    if len(tracks) == 0:
-        return
-
-    for track in tracks:
-        print "Caching %s..." % track.name
-        # Cache track values _at each frame, every n'th frame
-        anim = []
-        for t in range(start, end, n):
-            with _at(t):
-                anim.append(track.value)
-
-        # Now clear the track and write cached keys
-        _rt.deleteKeys(track)
-
-        anim_index = 0
-        with _animate(True):
-            for t in range(start, end, n):
-                # print anim[anim_index]
-                with _at(t):
-                    track.controller.value = anim[anim_index]
-                anim_index += 1
-
-        print "Baked %s" % track.name
 
 
 # --------------------

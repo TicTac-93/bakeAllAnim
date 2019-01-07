@@ -88,7 +88,7 @@
         <item>
          <widget class="QCheckBox" name="chk_pad">
           <property name="toolTip">
-           <string>If checked, and Nth Frame is set, we'll make sure to put a key on the End frame</string>
+           <string>If checked, make sure we place a keyframe on or after the End frame.</string>
           </property>
           <property name="text">
            <string>Pad Range?</string>
@@ -338,7 +338,7 @@
       <string>Status Update</string>
      </property>
      <property name="textFormat">
-      <enum>Qt::AutoText</enum>
+      <enum>Qt::RichText</enum>
      </property>
     </widget>
    </item>
