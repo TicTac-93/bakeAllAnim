@@ -23,6 +23,7 @@ import pymxs
 import MaxPlus
 
 # Misc
+import time # Used for Debugging
 import sys
 import os
 
@@ -137,23 +138,25 @@ class BakeAnimUI(QtW.QDialog):
         """
         Update the frame range spinners with the Max Time Slider range.
         """
-        _rt = self._pymxs.runtime
-        self._spn_start.setValue(_rt.animationRange.start)
-        self._spn_end.setValue(_rt.animationRange.end)
+        rt = self._pymxs.runtime
+        self._spn_start.setValue(rt.animationRange.start)
+        self._spn_end.setValue(rt.animationRange.end)
 
         # Update status label
         self._lbl_status.setText("<font %s>Updated:</font> Frame Range" % self._grn)
-
 
     def _update_tracks(self):
         """
         Updates the Track Selection box with a list of unique track names.
         """
-        _rt = self._pymxs.runtime
+        # DEBUG TIMER
+        update_tracks_start = time.time()
+
+        rt = self._pymxs.runtime
         tracks = []
         layout = self._box_tracks.layout()
 
-        selection = _rt.getCurrentSelection()
+        selection = rt.getCurrentSelection()
         self._bar_progress.setMaximum(len(selection))
         self._lbl_status.setText("Finding animated tracks...")
 
@@ -186,16 +189,22 @@ class BakeAnimUI(QtW.QDialog):
         
         self._lbl_status.setText("<font %s>Found:</font> %d Tracks in %d Objects" % (self._grn,
                                                                                      len(tracks),
-                                                                                     len(_rt.getCurrentSelection())))
+                                                                                     len(rt.getCurrentSelection())))
 
+        # DEBUG TIMER
+        update_tracks_end = time.time()
+        print "Get Tracks took %sms" % round((update_tracks_end-update_tracks_start)*1000, 3)
 
     def _bake(self):
         """
         Update options, validate frame range, and bake selected tracks.
         """
-        _rt = self._pymxs.runtime
-        _at = self._pymxs.attime
-        _animate = self._pymxs.animate
+        # DEBUG TIMER
+        bake_start = time.time()
+        
+        rt = self._pymxs.runtime
+        at = self._pymxs.attime
+        animate = self._pymxs.animate
 
         # Update options from GUI
         self._options['start'] = self._spn_start.value()
@@ -220,8 +229,8 @@ class BakeAnimUI(QtW.QDialog):
             self._options['end'] += ((self._options['end'] - self._options['start']) % self._options['nth'])
 
         # Bake selected objects / tracks
-        with self._pymxs.undo(True, 'Bake Selection'):
-            selection = _rt.getCurrentSelection()
+        with self._pymxs.undo(True, 'Bake Selection'), self._pymxs.redraw(False):
+            selection = rt.getCurrentSelection()
 
             # Update status label and progress bar
             self._lbl_status.setText("Baking %d Objects..." % len(selection))
@@ -229,29 +238,31 @@ class BakeAnimUI(QtW.QDialog):
             self._bar_progress.setMaximum(len(selection))
 
             for obj in selection:
+
                 tracks = self._get_keyed_subtracks(obj)
                 if len(tracks) == 0:
                     self._bar_progress.setValue(self._bar_progress.value()+1)
                     continue
 
                 for track in tracks:
+
                     # Skip track if it's not selected
                     if track.name not in self._options['tracks']:
                         continue
 
-                    # Cache track values _at each frame, every n'th frame
+                    # Cache track values at each frame, every n'th frame
                     anim = []
                     for t in range(self._options['start'], self._options['end']+1, self._options['nth']):
-                        with _at(t):
+                        with at(t):
                             anim.append(track.value)
 
                     # Now clear the track and write cached keys
-                    _rt.deleteKeys(track)
+                    rt.deleteKeys(track)
 
                     anim_index = 0
-                    with _animate(True):
+                    with animate(True):
                         for t in range(self._options['start'], self._options['end']+1, self._options['nth']):
-                            with _at(t):
+                            with at(t):
                                 track.controller.value = anim[anim_index]
                             anim_index += 1
 
@@ -261,8 +272,13 @@ class BakeAnimUI(QtW.QDialog):
                                                                                      len(self._options['tracks']),
                                                                                      len(selection)))
 
+        # DEBUG TIMER
+        bake_end = time.time()
+        # print "- Main Bake loop: %sms" % round((bake_end - bake_settings)*1000, 3)
+        print "Bake took %sms" % round((bake_end - bake_start)*1000, 3)
 
-    def _get_keyed_subtracks(self, track, list=[], namesOnly=False):
+    def _get_keyed_subtracks(self, track, list=None, namesOnly=None):
+        # TODO: Add option to ignore material tracks, since they're not usually animated
         """
         Crawl through track heirarchy, building a list of animated tracks.  Exclude Position and Rotation parent tracks.
         :param track: The track to start crawling from - also used when called recursively
@@ -270,11 +286,17 @@ class BakeAnimUI(QtW.QDialog):
         :param namesOnly: If true, only consider the track names for uniqueness.
         :return: A list of all (unique) animated track objects below the initial track.
         """
-        _rt = self._pymxs.runtime
+        # Default values
+        if list is None:
+            list = []
+        if namesOnly is None:
+            namesOnly = False
+
+        rt = self._pymxs.runtime
         ignore = ['Transform', 'Position', 'Rotation']
 
         # Only add this track to the list if it's a SubAnim, has a controller, and has been animated
-        if _rt.iskindof(track, _rt.SubAnim) and _rt.iscontroller(track.controller) and track.isanimated:
+        if rt.iskindof(track, rt.SubAnim) and rt.iscontroller(track.controller) and track.isanimated:
             if not namesOnly and track not in list and track.name not in ignore:
                 list.append(track)
             elif namesOnly and track.name not in list and track.name not in ignore:
@@ -283,7 +305,7 @@ class BakeAnimUI(QtW.QDialog):
         # Always call self recursively on all children of this track
         # Note: SubAnim list is 1-indexed.  Thanks, Autodesk.
         for i in range(1, track.numsubs + 1):
-            list = self._get_keyed_subtracks(_rt.getSubAnim(track, i), list, namesOnly)
+            list = self._get_keyed_subtracks(rt.getSubAnim(track, i), list, namesOnly)
 
         return list
 
@@ -299,3 +321,6 @@ ui = BakeAnimUI(_uif, pymxs, _app)
 
 # Punch it
 ui.show()
+
+# DEBUG
+# print "\rTest Version 22"
