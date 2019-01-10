@@ -75,7 +75,7 @@ class BakeAnimUI(QtW.QDialog):
 
         # Titling
 
-        self._window_title = "Bake All Anim v1.1.0"
+        self._window_title = "Bake All Anim DEV BUILD"
         self.setWindowTitle(self._window_title)
 
         # ---------------------------------------------------
@@ -231,9 +231,10 @@ class BakeAnimUI(QtW.QDialog):
 
         else:
             for track in tracks:
-                layout.addWidget(QtW.QCheckBox(track))
+                layout.addWidget(QtW.QCheckBox(track.split(' > ')[-1]))
                 widget = layout.itemAt(index).widget()
                 widget.setChecked(True)
+                widget.setToolTip(track)
                 self._bar_progress.setValue(self._bar_progress.value()+1)
                 index += 1
 
@@ -271,7 +272,7 @@ class BakeAnimUI(QtW.QDialog):
             self._bar_progress.setMaximum(len(selection))
 
             for obj in selection:
-                tracks = self._get_keyed_subtracks(obj)
+                tracks = self._get_keyed_subtracks(obj, parent=obj.name)
                 if len(tracks) == 0:
                     self._bar_progress.setValue(self._bar_progress.value()+1)
                     continue
@@ -309,13 +310,16 @@ class BakeAnimUI(QtW.QDialog):
         # print "- Main Bake loop: %sms" % round((bake_end - bake_settings)*1000, 3)
         print "Bake took %sms" % round((bake_end - bake_start)*1000, 3)
 
-    def _get_keyed_subtracks(self, track, list=None, namesOnly=None, firstCall=None):
-        # TODO: Add option to ignore material tracks, since they're not usually animated
+    def _get_keyed_subtracks(self, track, parent=None, list=None, namesOnly=None, firstCall=None):
+        # TODO: Test script with ALL 3dsMax Transform controllers, make sure ignore list isn't cutting anything out
         """
-        Crawl through track heirarchy, building a list of animated tracks.  Exclude Position and Rotation parent tracks.
+        Crawl through track heirarchy, building a list of animated tracks.  Exclude known top-level tracks that should
+        not be baked.
+        If run with namesOnly=True, the returned list is formatted like "parent > track", eg. "Path Constraint > Percent"
         :param track: The track to start crawling from - also used when called recursively
         :param list: The list of animated tracks, should start blank.
         :param namesOnly: If true, only consider the track names for uniqueness.
+        :param parent: The name of the track from which this was called, used for namesOnly output.
         :param firstCall: Set internally, if unset we'll call ourself recursively in the chosen tracks.
         :return: A list of all (unique) animated track objects below the initial track.
         """
@@ -326,9 +330,16 @@ class BakeAnimUI(QtW.QDialog):
             namesOnly = False
         if firstCall is None:
             firstCall = True
+        if parent is None:
+            long_name = track.name
+        else:
+            long_name = "%s > %s" % (parent, track.name)
 
         rt = self._pymxs.runtime
-        ignore = ['Transform', 'Position', 'Rotation']
+        ignore = ['Transform', 'Weights',
+                  'Position XYZ', 'AudioPosition', 'Motion Clip SlavePos', 'Noise Position', 'Path Constraint', 'Position Expression', 'Position List', 'Position Motion Capture', 'Position Script', 'Ray To Surface Position', 'SlavePos', 'Spring', 'Surface',
+                  'Euler XYZ', 'AudioRotation', 'LookAt Constraint', 'MCG LookAt', 'Motion Clip SlaveRotation', 'Noise Rotation', 'Ray To Surface Orientation', 'Rotation Motion Capture', 'Rotation Script', 'SlaveRotation',
+                  'AudioScale', 'Motion Clip SlaveScale', 'Noise Scale', 'Scale Expression', 'Scale List', 'Scale Motion Capture', 'Scale Script', 'ScaleXYZ', 'SlaveScale']
 
         # DEBUG
         # track_properties = rt.getPropNames(track)
@@ -338,32 +349,33 @@ class BakeAnimUI(QtW.QDialog):
         #     print " -Props: %s" % track_properties
         # /DEBUG
 
-        # Only add this track to the list if it's a SubAnim, has a controller, and has been animated
-        if rt.iskindof(track, rt.SubAnim) and rt.iscontroller(track.controller) and track.isanimated:
-            if not namesOnly and track not in list and track.name not in ignore:
-                list.append(track)
-            elif namesOnly and track.name not in list and track.name not in ignore:
-                list.append(track.name)
-
         # Call recursively on selected tracks
-        # Track 1 is object visibility
-        # Track 3 is object transforms
-        # Track 4 is object modifiers
-        # Track 5 is object material
         if firstCall:
+            # Track 1 is object visibility
+            # Track 3 is object transforms
+            # Track 4 is object modifiers
+            # Track 5 is object material
             if self._options['visibility'] and rt.getSubAnim(track, 1) is not None:
-                list = self._get_keyed_subtracks(rt.getSubAnim(track, 1), list, namesOnly, firstCall=False)
+                list = self._get_keyed_subtracks(rt.getSubAnim(track, 1), None, list, namesOnly, False)
             if self._options['transforms']:
-                list = self._get_keyed_subtracks(rt.getSubAnim(track, 3), list, namesOnly, firstCall=False)
+                list = self._get_keyed_subtracks(rt.getSubAnim(track, 3), None, list, namesOnly, False)
             if self._options['modifiers']:
-                list = self._get_keyed_subtracks(rt.getSubAnim(track, 4), list, namesOnly, firstCall=False)
+                list = self._get_keyed_subtracks(rt.getSubAnim(track, 4), None, list, namesOnly, False)
             if self._options['materials'] and rt.getSubAnim(track, 5) is not None:
-                list = self._get_keyed_subtracks(rt.getSubAnim(track, 5), list, namesOnly, firstCall=False)
+                list = self._get_keyed_subtracks(rt.getSubAnim(track, 5), None, list, namesOnly, False)
 
-        # Note: SubAnim list is 1-indexed.  Thanks, Autodesk.
+        # Try to add current track to list, then continue calling self recursively
         else:
+            if rt.isKindOf(track, rt.SubAnim) and rt.isController(track.controller) and track.isAnimated:
+                if namesOnly:
+                    if track.name not in ignore and long_name not in list:
+                        list.append(long_name)
+                elif track.name not in ignore and track not in list:
+                    list.append(track)
+
+            # Note: SubAnim list is 1-indexed.  Thanks, Autodesk.
             for i in range(1, track.numSubs + 1):
-                list = self._get_keyed_subtracks(rt.getSubAnim(track, i), list, namesOnly, firstCall=False)
+                list = self._get_keyed_subtracks(rt.getSubAnim(track, i), long_name, list, namesOnly, False)
 
         return list
 
@@ -381,4 +393,4 @@ ui = BakeAnimUI(_uif, pymxs, _app)
 ui.show()
 
 # DEBUG
-print "\rTest Version 49"
+print "\rTest Version 60"
