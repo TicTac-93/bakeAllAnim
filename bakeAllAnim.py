@@ -163,6 +163,8 @@ class BakeAnimUI(QtW.QDialog):
         :param validate: Bool, validate settings if True
         :return: Bool indicating success or failure
         """
+        rt = self._pymxs.runtime
+
         # Update options from GUI
         self._options['start'] = self._spn_start.value()
         self._options['end'] = self._spn_end.value()
