@@ -21,6 +21,7 @@ from PySide2.QtCore import QFile
 # Import PyMXS, MaxPlus, and set up shorthand vars
 import pymxs
 import MaxPlus
+maxscript = MaxPlus.Core.EvalMAXScript
 
 # Misc
 import time # Used for Debugging
@@ -98,6 +99,7 @@ class BakeAnimUI(QtW.QDialog):
         self._chk_materials = self.findChild(QtW.QCheckBox, 'chk_materials')
 
         # Bake
+        self._cb_key_type = self.findChild(QtW.QComboBox, 'cb_key_type')
         self._btn_bake = self.findChild(QtW.QPushButton, 'btn_getBaked')
         self._bar_progress = self.findChild(QtW.QProgressBar, 'bar_progress')
         self._lbl_status = self.findChild(QtW.QLabel, 'lbl_status')
@@ -128,7 +130,8 @@ class BakeAnimUI(QtW.QDialog):
                          'modifiers': True,
                          'visibility': False,
                          'materials': False,
-                         'tracks': []}
+                         'tracks': [],
+                         'keyType': 2}
 
         # Label color vars
         self._err = "color=#e82309"
@@ -170,10 +173,26 @@ class BakeAnimUI(QtW.QDialog):
         self._options['visibility'] = self._chk_visibility.isChecked()
         self._options['materials'] = self._chk_materials.isChecked()
         self._options['tracks'] = []
+        self._options['keyType'] = self._cb_key_type.currentIndex()
 
         # Pad frame range
         if self._options['pad'] and ((self._options['end'] - self._options['start']) % self._options['nth']) > 0:
             self._options['end'] += ((self._options['end'] - self._options['start']) % self._options['nth'])
+
+        # Update keyType with the proper Max Name object
+        key_index = self._options['keyType']
+        if key_index == 0:
+            self._options['keyType'] = rt.name('smooth')
+        elif key_index == 1:
+            self._options['keyType'] = rt.name('linear')
+        elif key_index == 2:
+            self._options['keyType'] = rt.name('step')
+        elif key_index == 3:
+            self._options['keyType'] = rt.name('fast')
+        elif key_index == 4:
+            self._options['keyType'] = rt.name('slow')
+        elif key_index == 5:
+            self._options['keyType'] = rt.name('auto')
 
         # Get selected tracks
         if tracks is True:
@@ -192,6 +211,7 @@ class BakeAnimUI(QtW.QDialog):
         return True
 
     def _update_tracks(self):
+        # TODO: Add option to quick-select all/none tracks
         """
         Updates the Track Selection box with a list of unique track names.
         """
@@ -264,6 +284,16 @@ class BakeAnimUI(QtW.QDialog):
 
         # Bake selected objects / tracks
         with self._pymxs.undo(True, 'Bake Selection'), self._pymxs.redraw(False):
+
+            # Set up keyframe interpolation, and store current settings
+            # MaxScript snippet sets up global vars (accessed via pymxs.runtime) for current def tangents
+            maxscript("""
+            maxOps.getDefaultTangentType &tanIn &tanOut
+            global tanIn_old = tanIn
+            global tanOut_old = tanOut
+            """)
+            rt.maxops.setDefaultTangentType(self._options['keyType'], self._options['keyType'])
+
             selection = rt.getCurrentSelection()
 
             # Update status label and progress bar
@@ -300,6 +330,9 @@ class BakeAnimUI(QtW.QDialog):
                             anim_index += 1
 
                 self._bar_progress.setValue(self._bar_progress.value()+1)
+
+            # Restore old def tangent type
+            rt.maxops.setDefaultTangentType(rt.tanIn_old, rt.tanOut_old)
 
         self._lbl_status.setText("<font %s>Baked:</font> %d tracks on %d objects" % (self._grn,
                                                                                      len(self._options['tracks']),
@@ -393,4 +426,4 @@ ui = BakeAnimUI(_uif, pymxs, _app)
 ui.show()
 
 # DEBUG
-print "\rTest Version 60"
+print "\rTest Version 61"
